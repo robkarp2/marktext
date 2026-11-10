@@ -1140,6 +1140,17 @@ pre.mu-active.mu-fenced-code::after {
 
     min-width: 2em;
 
+    /* Keep words whole so each column is at least as wide as its longest
+       word. `anywhere` would also let the table squeeze a short column
+       ("Current", "disabled") down to a letter or two whenever a neighbour
+       holds long prose. */
+    overflow-wrap: break-word;
+}
+
+/* Set by the table block only when whole words cannot fit the editor width,
+   e.g. a long URL or digit run (#5605): break inside words rather than let
+   the table overflow the column. */
+.mu-table-wrap-anywhere .mu-table-cell-content {
     overflow-wrap: anywhere;
 }
 
