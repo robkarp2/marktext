@@ -9,6 +9,7 @@ import type TableRow from './row';
 import type TableInner from './table';
 import diff from 'fast-diff';
 import { fromEvent } from 'rxjs';
+import { CLASS_NAMES } from '../../../config';
 import { diffToTextOp } from '../../../utils';
 import logger from '../../../utils/logger';
 import { LinkedList } from '../../base/linkedList/linkedList';
@@ -26,6 +27,7 @@ class Table extends Parent {
         const table = new Table(muya);
 
         table.append(ScrollPage.loadBlock('table.inner').create(muya, state));
+        table._observeColumnFit();
 
         return table;
     }
@@ -78,6 +80,49 @@ class Table extends Parent {
         this.classList = ['mu-table'];
         this.createDomNode();
         this._listenDomEvent();
+    }
+
+    private _columnFitObserver: ResizeObserver | null = null;
+    private _columnFitFrame = 0;
+
+    // Cells keep words whole, so columns are never narrower than their
+    // longest word. When that makes the table wider than the editor (a long
+    // URL or digit run, #5605), switch this table to breaking inside words.
+    // Re-check whenever the editor column or the table itself changes size.
+    private _observeColumnFit() {
+        if (this._columnFitObserver != null || typeof ResizeObserver === 'undefined')
+            return;
+        const figure = this.domNode!;
+        const table = (this.firstChild as TableInner).domNode!;
+        this._columnFitObserver = new ResizeObserver(() => this._scheduleColumnFit());
+        this._columnFitObserver.observe(figure);
+        this._columnFitObserver.observe(table);
+    }
+
+    // Toggling the class resizes the observed elements, so apply it in the
+    // next frame instead of inside the observer callback (avoids
+    // "ResizeObserver loop" errors). The check is idempotent, so the follow-up
+    // notification it causes settles immediately.
+    private _scheduleColumnFit() {
+        if (this._columnFitFrame !== 0)
+            return;
+        this._columnFitFrame = requestAnimationFrame(() => {
+            this._columnFitFrame = 0;
+            this._fitColumnsToWidth();
+        });
+    }
+
+    private _fitColumnsToWidth() {
+        const figure = this.domNode;
+        const table = (this.firstChild as TableInner | null)?.domNode;
+        if (figure == null || table == null || !figure.isConnected)
+            return;
+
+        // Measure with whole words first; both class changes happen in one
+        // task, so the intermediate layout is never painted.
+        figure.classList.remove(CLASS_NAMES.MU_TABLE_WRAP_ANYWHERE);
+        const overflows = table.getBoundingClientRect().width > figure.clientWidth + 1;
+        figure.classList.toggle(CLASS_NAMES.MU_TABLE_WRAP_ANYWHERE, overflows);
     }
 
     isEmpty() {
